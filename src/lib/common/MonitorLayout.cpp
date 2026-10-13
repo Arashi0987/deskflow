@@ -346,6 +346,11 @@ void MonitorLayout::clearPlacements(const std::string &computer)
   std::erase_if(m_placements, [&computer](const auto &entry) { return entry.first.computer == computer; });
 }
 
+void MonitorLayout::clearPlacements()
+{
+  m_placements.clear();
+}
+
 bool MonitorLayout::hasPlacement(const std::string &computer, const std::string &monitorId) const
 {
   return m_placements.contains({computer, monitorId});

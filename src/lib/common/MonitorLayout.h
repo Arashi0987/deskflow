@@ -184,6 +184,7 @@ public:
   void setPlacement(const std::string &computer, const std::string &monitorId, int32_t gx, int32_t gy);
   void removePlacement(const std::string &computer, const std::string &monitorId);
   void clearPlacements(const std::string &computer);
+  void clearPlacements();
   bool hasPlacement(const std::string &computer, const std::string &monitorId) const;
   std::optional<std::pair<int32_t, int32_t>> placement(const std::string &computer, const std::string &monitorId) const;
   //! Load placements from stored records (only records with placed == true are used).

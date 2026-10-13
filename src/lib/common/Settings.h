@@ -114,6 +114,7 @@ public:
     inline static const auto GridHeight = QStringLiteral("server/gridHeight");
     inline static const auto GridWidth = QStringLiteral("server/gridWidth");
     inline static const auto Heartbeat = QStringLiteral("server/heartbeat");
+    inline static const auto MonitorLayout = QStringLiteral("server/monitorLayout");
     inline static const auto Protocol = QStringLiteral("server/protocol");
     inline static const auto RelativeMouseMoves = QStringLiteral("server/relativeMouseMoves");
     inline static const auto SwitchDelay = QStringLiteral("server/switchDelay");
@@ -130,6 +131,8 @@ public:
     inline static const auto HalfDuplexCapsLock = QStringLiteral("computer_%1/halfDuplexCapsLock");
     inline static const auto HalfDuplexNumLock = QStringLiteral("computer_%1/halfDuplexNumLock");
     inline static const auto HalfDuplexScrollLock = QStringLiteral("computer_%1/halfDuplexScrollLock");
+    // per-monitor layout records (deskflow::monitors::serializeStored), one string per monitor
+    inline static const auto Monitors = QStringLiteral("computer_%1/monitors");
     inline static const auto ModifierAlt = QStringLiteral("computer_%1/modifierAlt");
     inline static const auto ModifierAltGr = QStringLiteral("computer_%1/modifierAltGr");
     inline static const auto ModifierCtrl = QStringLiteral("computer_%1/modifierCtrl");
@@ -330,6 +333,7 @@ private:
     , Server::GridHeight
     , Server::GridWidth
     , Server::Heartbeat
+    , Server::MonitorLayout
     , Server::Protocol
     , Server::RelativeMouseMoves
     , Server::SwitchDelay
@@ -361,6 +365,7 @@ private:
     , Server::EnableSwitchDelay
     , Server::EnableSwitchDoubleTap
     , Server::ExternalConfig
+    , Server::MonitorLayout
     , Server::RelativeMouseMoves
     , Server::XdpClipboardRetried
   };
