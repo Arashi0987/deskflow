@@ -81,6 +81,8 @@ struct MonitorInfo
   std::string id;            ///< stable identity (RandR output name, Windows device interface id, ...)
   std::string label;         ///< human readable name for the editor
   Rect local;                ///< bounds in the owning computer's input coordinate space
+  int32_t pixelWidth = 0;    ///< native resolution; 0 means same as local bounds
+  int32_t pixelHeight = 0;
   int32_t scalePercent = 100; ///< OS display scale; 100 == 96 dpi
   int32_t rotation = 0;      ///< degrees (0/90/180/270), informational
   bool primary = false;
@@ -107,7 +109,9 @@ struct PlacedMonitor
   Rect global;
 };
 
-//! Size of a monitor in the global layout (logical units).
+//! Size of a monitor in the global layout (logical units): native resolution divided by OS scale.
+//! Mapping between local and global coordinates is proportional, so this is correct whether the
+//! local input space is physical pixels or DPI-virtualized coordinates.
 int32_t logicalExtent(int32_t pixels, int32_t scalePercent);
 Rect globalRect(const MonitorInfo &info, int32_t gx, int32_t gy);
 

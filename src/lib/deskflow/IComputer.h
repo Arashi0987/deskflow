@@ -8,7 +8,10 @@
 
 #pragma once
 
+#include "common/MonitorLayout.h"
 #include "deskflow/ClipboardTypes.h"
+
+#include <vector>
 
 class IClipboard;
 
@@ -55,6 +58,22 @@ public:
   Return the current position of the cursor in \c x and \c y.
   */
   virtual void getCursorPos(int32_t &x, int32_t &y) const = 0;
+
+  //! Get monitors
+  /*!
+  Return the monitors that make up the desktop, in the same coordinate space
+  as getShape(). The default reports the whole desktop as a single monitor,
+  which is what computers that cannot enumerate their monitors look like.
+  */
+  virtual std::vector<deskflow::monitors::MonitorInfo> getMonitors() const
+  {
+    int32_t x = 0;
+    int32_t y = 0;
+    int32_t w = 0;
+    int32_t h = 0;
+    getShape(x, y, w, h);
+    return {deskflow::monitors::wholeDesktop(x, y, w, h)};
+  }
 
   //@}
 };

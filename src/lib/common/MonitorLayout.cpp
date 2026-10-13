@@ -123,6 +123,8 @@ std::optional<MonitorInfo> monitorFromFields(const std::map<std::string, std::st
   if (const auto label = fields.find("label"); label != fields.end())
     info.label = label->second;
   info.local = {*x, *y, *w, *h};
+  info.pixelWidth = std::max(0, toInt(fields, "pw").value_or(0));
+  info.pixelHeight = std::max(0, toInt(fields, "ph").value_or(0));
   info.scalePercent = toInt(fields, "scale").value_or(100);
   if (info.scalePercent <= 0)
     info.scalePercent = 100;
@@ -141,6 +143,10 @@ std::string monitorFields(const MonitorInfo &info)
   appendField(out, "y", info.local.y);
   appendField(out, "w", info.local.w);
   appendField(out, "h", info.local.h);
+  if (info.pixelWidth > 0 && info.pixelHeight > 0) {
+    appendField(out, "pw", info.pixelWidth);
+    appendField(out, "ph", info.pixelHeight);
+  }
   appendField(out, "scale", info.scalePercent);
   appendField(out, "rot", info.rotation);
   appendField(out, "primary", info.primary ? 1 : 0);
@@ -195,7 +201,10 @@ int32_t logicalExtent(int32_t pixels, int32_t scalePercent)
 
 Rect globalRect(const MonitorInfo &info, int32_t gx, int32_t gy)
 {
-  return {gx, gy, logicalExtent(info.local.w, info.scalePercent), logicalExtent(info.local.h, info.scalePercent)};
+  const bool hasPixels = info.pixelWidth > 0 && info.pixelHeight > 0;
+  const int32_t pw = hasPixels ? info.pixelWidth : info.local.w;
+  const int32_t ph = hasPixels ? info.pixelHeight : info.local.h;
+  return {gx, gy, logicalExtent(pw, info.scalePercent), logicalExtent(ph, info.scalePercent)};
 }
 
 MonitorInfo wholeDesktop(int32_t x, int32_t y, int32_t w, int32_t h)

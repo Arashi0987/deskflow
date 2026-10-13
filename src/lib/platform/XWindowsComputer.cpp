@@ -460,6 +460,99 @@ void XWindowsComputer::getShape(int32_t &x, int32_t &y, int32_t &w, int32_t &h) 
   h = m_h;
 }
 
+std::vector<deskflow::monitors::MonitorInfo> XWindowsComputer::getMonitors() const
+{
+  using deskflow::monitors::MonitorInfo;
+  std::vector<MonitorInfo> monitors;
+
+#if HAVE_X11_EXTENSIONS_XRANDR_H
+  // RandR 1.5 monitors carry the output name (e.g. "DP-1"), which is stable across restarts
+  int major = 0;
+  int minor = 0;
+  if (m_xrandr && XRRQueryVersion(m_display, &major, &minor) && (major > 1 || (major == 1 && minor >= 5))) {
+    int count = 0;
+    if (XRRMonitorInfo *list = XRRGetMonitors(m_display, m_root, True, &count); list != nullptr) {
+      XRRScreenResources *resources = XRRGetScreenResourcesCurrent(m_display, m_root);
+      for (int i = 0; i < count; ++i) {
+        const XRRMonitorInfo &item = list[i];
+        MonitorInfo info;
+        if (char *name = XGetAtomName(m_display, item.name); name != nullptr) {
+          info.id = name;
+          XFree(name);
+        } else {
+          info.id = "randr-" + std::to_string(i);
+        }
+        info.label = info.id;
+        info.local = {item.x, item.y, item.width, item.height};
+        info.primary = item.primary != 0;
+
+        // X11 has no per-monitor scale; rotation comes from the CRTC driving the first output
+        if (resources != nullptr && item.noutput > 0) {
+          if (XRROutputInfo *output = XRRGetOutputInfo(m_display, resources, item.outputs[0]); output != nullptr) {
+            if (output->crtc != None) {
+              if (XRRCrtcInfo *crtc = XRRGetCrtcInfo(m_display, resources, output->crtc); crtc != nullptr) {
+                switch (crtc->rotation & 0xf) {
+                case RR_Rotate_90:
+                  info.rotation = 90;
+                  break;
+                case RR_Rotate_180:
+                  info.rotation = 180;
+                  break;
+                case RR_Rotate_270:
+                  info.rotation = 270;
+                  break;
+                default:
+                  break;
+                }
+                XRRFreeCrtcInfo(crtc);
+              }
+            }
+            XRRFreeOutputInfo(output);
+          }
+        }
+        monitors.push_back(info);
+      }
+      if (resources != nullptr) {
+        XRRFreeScreenResources(resources);
+      }
+      XRRFreeMonitors(list);
+    }
+  }
+#endif
+
+#if HAVE_X11_EXTENSIONS_XINERAMA_H
+  if (monitors.empty()) {
+    int eventBase = 0;
+    int errorBase = 0;
+    if (XineramaQueryExtension(m_display, &eventBase, &errorBase) && XineramaIsActive(m_display)) {
+      int count = 0;
+      if (XineramaScreenInfo *screens = XineramaQueryScreens(m_display, &count); screens != nullptr) {
+        for (int i = 0; i < count; ++i) {
+          MonitorInfo info;
+          info.id = "xinerama-" + std::to_string(screens[i].screen_number);
+          info.label = info.id;
+          info.local = {screens[i].x_org, screens[i].y_org, screens[i].width, screens[i].height};
+          info.primary = i == 0;
+          monitors.push_back(info);
+        }
+        XFree(screens);
+      }
+    }
+  }
+#endif
+
+  for (const auto &info : monitors) {
+    LOG_DEBUG(
+        "monitor \"%s\" at %d,%d %dx%d rotation %d%s", info.id.c_str(), info.local.x, info.local.y, info.local.w,
+        info.local.h, info.rotation, info.primary ? " primary" : ""
+    );
+  }
+  if (monitors.empty()) {
+    return PlatformComputer::getMonitors();
+  }
+  return monitors;
+}
+
 void XWindowsComputer::getCursorPos(int32_t &x, int32_t &y) const
 {
   Window root;

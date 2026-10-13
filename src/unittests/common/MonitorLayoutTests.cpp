@@ -271,6 +271,30 @@ void MonitorLayoutTests::route_mixedDpi_mapsProportionally()
   QCOMPARE(layout.route("D", 0, 1000, -2, 1000).kind, Kind::Blocked);
 }
 
+void MonitorLayoutTests::route_dpiVirtualizedLocalSpace_matchesPhysical()
+{
+  // a DPI-unaware process on Windows sees the 150% monitor as 1707x960 even though it is 2560x1440;
+  // the layout size and the routing outcome must not depend on which space the computer reports
+  MonitorInfo virtualized = mon("S1", 0, 0, 1707, 960, 150);
+  virtualized.pixelWidth = 2560;
+  virtualized.pixelHeight = 1440;
+  QCOMPARE(globalRect(virtualized, 0, 0), (Rect{0, 0, 1707, 960}));
+
+  MonitorLayout layout;
+  layout.setLiveMonitors("S", {virtualized});
+  layout.setLiveMonitors("D", {mon("D1", 0, 0, 1920, 1080)});
+  layout.setPlacement("S", "S1", 0, 0);
+  layout.setPlacement("D", "D1", 1707, 0);
+
+  auto step = layout.route("S", 1706, 480, 1709, 480);
+  QCOMPARE(step.kind, Kind::Remote);
+  QCOMPARE(step.y, 480);
+  step = layout.route("D", 0, 959, -2, 959);
+  QCOMPARE(step.kind, Kind::Remote);
+  QCOMPARE(step.x, 1706);
+  QCOMPARE(step.y, 959);
+}
+
 void MonitorLayoutTests::route_portrait_mapsAlongLongEdge()
 {
   MonitorLayout layout;
@@ -574,6 +598,8 @@ void MonitorLayoutTests::serialize_roundTrip()
   MonitorInfo a = mon("\\\\.\\DISPLAY1", -1920, -200, 1920, 1080, 125);
   a.label = "DELL U2720Q";
   a.rotation = 90;
+  a.pixelWidth = 2400;
+  a.pixelHeight = 1350;
   a.primary = true;
   const MonitorInfo b = mon("HDMI-1", 0, 0, 2560, 1440);
 

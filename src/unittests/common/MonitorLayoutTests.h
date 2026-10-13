@@ -28,6 +28,7 @@ private Q_SLOTS:
   void route_noLayoutNeighbour_fallsBackToOsArrangement();
   void route_layoutSendsToDifferentLocalMonitor_warpsLocally();
   void route_mixedDpi_mapsProportionally();
+  void route_dpiVirtualizedLocalSpace_matchesPhysical();
   void route_portrait_mapsAlongLongEdge();
   void route_negativeCoordinates();
   void route_roundTrip_doesNotTeleport();
