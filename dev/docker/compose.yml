@@ -1,0 +1,25 @@
+# Usage (from the repository root):
+#   docker compose -f dev/docker/compose.yml run --rm build
+#   docker compose -f dev/docker/compose.yml run --rm test
+# Source is bind-mounted read/write at /src; build output goes to <repo>/build (gitignored).
+services:
+  build: &base
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: deskflow-dev:per-monitor
+    volumes:
+      - ../..:/src
+      - ../../build:/build
+    environment:
+      - QT_QPA_PLATFORM=offscreen
+      - LANG=C.UTF-8
+    command: >
+      bash -c "cmake -S /src -B /build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON -DSKIP_BUILD_TESTS=ON
+      && cmake --build /build -j$$(nproc)"
+  test:
+    <<: *base
+    command: bash -c "cd /build && ctest --output-on-failure -j8"
+  shell:
+    <<: *base
+    command: bash
