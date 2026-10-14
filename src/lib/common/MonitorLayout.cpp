@@ -250,9 +250,8 @@ std::vector<MonitorInfo> parseMonitors(const std::string &text)
       continue;
     if (auto monitor = parseMonitor(line); monitor) {
       // ids must be unique per computer; first one wins
-      const bool duplicate = std::any_of(monitors.begin(), monitors.end(), [&](const MonitorInfo &m) {
-        return m.id == monitor->id;
-      });
+      const bool duplicate =
+          std::any_of(monitors.begin(), monitors.end(), [&](const MonitorInfo &m) { return m.id == monitor->id; });
       if (!duplicate)
         monitors.push_back(*monitor);
     }
@@ -308,10 +307,14 @@ Rect snapRect(const Rect &moving, const std::vector<Rect> &others, int32_t toler
     const bool nearVertically = moving.y < o.bottom() + tolerance && o.y < moving.bottom() + tolerance;
     const bool nearHorizontally = moving.x < o.right() + tolerance && o.x < moving.right() + tolerance;
     if (nearVertically) {
-      xDeltas.insert(xDeltas.end(), {o.right() - moving.x, o.x - moving.right(), o.x - moving.x, o.right() - moving.right()});
+      xDeltas.insert(
+          xDeltas.end(), {o.right() - moving.x, o.x - moving.right(), o.x - moving.x, o.right() - moving.right()}
+      );
     }
     if (nearHorizontally) {
-      yDeltas.insert(yDeltas.end(), {o.bottom() - moving.y, o.y - moving.bottom(), o.y - moving.y, o.bottom() - moving.bottom()});
+      yDeltas.insert(
+          yDeltas.end(), {o.bottom() - moving.y, o.y - moving.bottom(), o.y - moving.y, o.bottom() - moving.bottom()}
+      );
     }
   }
 
@@ -670,9 +673,7 @@ std::vector<MonitorLayout::Issue> MonitorLayout::validate() const
   for (size_t i = 0; i < all.size(); ++i) {
     for (size_t j = i + 1; j < all.size(); ++j) {
       if (all[i].global.intersects(all[j].global)) {
-        issues.push_back(
-            {IssueKind::Overlap, all[i].computer, all[i].info.id, all[j].computer, all[j].info.id}
-        );
+        issues.push_back({IssueKind::Overlap, all[i].computer, all[i].info.id, all[j].computer, all[j].info.id});
       }
     }
   }
@@ -708,9 +709,8 @@ std::vector<MonitorLayout::Issue> MonitorLayout::validate() const
     const auto live = m_live.find(key.computer);
     if (live == m_live.end())
       continue; // whole computer is offline; that's expected
-    const bool present = std::any_of(live->second.begin(), live->second.end(), [&key](const MonitorInfo &m) {
-      return m.id == key.id;
-    });
+    const bool present =
+        std::any_of(live->second.begin(), live->second.end(), [&key](const MonitorInfo &m) { return m.id == key.id; });
     if (!present)
       issues.push_back({IssueKind::Offline, key.computer, key.id, {}, {}});
   }

@@ -152,7 +152,9 @@ QString MonitorLayoutView::describe(const Item &item) const
   const int pw = info.pixelWidth > 0 ? info.pixelWidth : info.local.w;
   const int ph = info.pixelHeight > 0 ? info.pixelHeight : info.local.h;
   QStringList parts;
-  parts << QStringLiteral("%1 / %2").arg(item.computer, QString::fromStdString(info.label.empty() ? info.id : info.label));
+  parts << QStringLiteral("%1 / %2").arg(
+      item.computer, QString::fromStdString(info.label.empty() ? info.id : info.label)
+  );
   parts << tr("%1x%2 at %3%").arg(pw).arg(ph).arg(info.scalePercent);
   if (ph > pw)
     parts << tr("portrait");
@@ -205,7 +207,9 @@ void MonitorLayoutView::paintEvent(QPaintEvent *)
     const bool selected = item.computer == m_selComputer && QString::fromStdString(item.monitor.info.id) == m_selId;
 
     p.setBrush(item.placed ? colour : QColor(colour.red(), colour.green(), colour.blue(), 70));
-    QPen pen(item.overlapping ? QColor(Qt::red) : (selected ? palette().color(QPalette::Highlight) : colour.darker(160)));
+    QPen pen(
+        item.overlapping ? QColor(Qt::red) : (selected ? palette().color(QPalette::Highlight) : colour.darker(160))
+    );
     pen.setWidthF(selected || item.overlapping ? 3.0 : 1.5);
     if (!item.placed || !item.online)
       pen.setStyle(Qt::DashLine);
@@ -346,8 +350,10 @@ void MonitorLayoutView::moveSelected(int gx, int gy, bool snap)
     if (isSelf)
       self = &item;
     else if (item.placed)
-      others.push_back({static_cast<int32_t>(item.global.x()), static_cast<int32_t>(item.global.y()),
-                        static_cast<int32_t>(item.global.width()), static_cast<int32_t>(item.global.height())});
+      others.push_back(
+          {static_cast<int32_t>(item.global.x()), static_cast<int32_t>(item.global.y()),
+           static_cast<int32_t>(item.global.width()), static_cast<int32_t>(item.global.height())}
+      );
   }
   if (!self)
     return;

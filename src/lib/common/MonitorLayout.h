@@ -78,13 +78,13 @@ struct Rect
 //! What a computer reports about one of its monitors.
 struct MonitorInfo
 {
-  std::string id;            ///< stable identity (RandR output name, Windows device interface id, ...)
-  std::string label;         ///< human readable name for the editor
-  Rect local;                ///< bounds in the owning computer's input coordinate space
-  int32_t pixelWidth = 0;    ///< native resolution; 0 means same as local bounds
+  std::string id;         ///< stable identity (RandR output name, Windows device interface id, ...)
+  std::string label;      ///< human readable name for the editor
+  Rect local;             ///< bounds in the owning computer's input coordinate space
+  int32_t pixelWidth = 0; ///< native resolution; 0 means same as local bounds
   int32_t pixelHeight = 0;
   int32_t scalePercent = 100; ///< OS display scale; 100 == 96 dpi
-  int32_t rotation = 0;      ///< degrees (0/90/180/270), informational
+  int32_t rotation = 0;       ///< degrees (0/90/180/270), informational
   bool primary = false;
 
   bool operator==(const MonitorInfo &) const = default;
@@ -162,10 +162,10 @@ public:
 
   enum class IssueKind
   {
-    Overlap,   ///< two placed monitors overlap
-    Isolated,  ///< a placed monitor shares no edge with any other placed monitor
-    Unplaced,  ///< a live monitor has no placement and is not routable
-    Offline    ///< a placed monitor is not currently reported by its computer
+    Overlap,  ///< two placed monitors overlap
+    Isolated, ///< a placed monitor shares no edge with any other placed monitor
+    Unplaced, ///< a live monitor has no placement and is not routable
+    Offline   ///< a placed monitor is not currently reported by its computer
   };
 
   struct Issue
@@ -240,12 +240,10 @@ private:
     }
   };
 
-  const PlacedMonitor *sourceMonitor(
-      const std::vector<PlacedMonitor> &own, int32_t fromX, int32_t fromY, int32_t toX, int32_t toY
-  ) const;
-  const PlacedMonitor *neighbour(
-      const std::vector<PlacedMonitor> &all, const PlacedMonitor &src, Direction dir, double along
-  ) const;
+  const PlacedMonitor *
+  sourceMonitor(const std::vector<PlacedMonitor> &own, int32_t fromX, int32_t fromY, int32_t toX, int32_t toY) const;
+  const PlacedMonitor *
+  neighbour(const std::vector<PlacedMonitor> &all, const PlacedMonitor &src, Direction dir, double along) const;
   bool crossEdge(
       const std::vector<PlacedMonitor> &all, const PlacedMonitor &src, Direction dir, int32_t edgeX, int32_t edgeY,
       int32_t toX, int32_t toY, int32_t entryInset, Step &step

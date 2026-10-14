@@ -38,9 +38,8 @@ QList<StoredMonitor> MonitorTopology::merge(const QList<StoredMonitor> &stored, 
   for (const auto &info : live) {
     if (info.id.empty() || !info.local.isValid())
       continue;
-    auto it = std::find_if(result.begin(), result.end(), [&info](const StoredMonitor &m) {
-      return m.info.id == info.id;
-    });
+    auto it =
+        std::find_if(result.begin(), result.end(), [&info](const StoredMonitor &m) { return m.info.id == info.id; });
     if (it != result.end()) {
       it->info = info; // keep the placement, refresh resolution/scale/local position
     } else {
@@ -162,9 +161,8 @@ void MonitorTopology::autoPlace(const QString &computer)
   for (const int i : placedNow) {
     auto &m = own[i];
     const auto r = rectOf(m);
-    const bool overlaps = std::any_of(occupied.cbegin(), occupied.cend(), [&r](const Rect &o) {
-      return o.intersects(r);
-    });
+    const bool overlaps =
+        std::any_of(occupied.cbegin(), occupied.cend(), [&r](const Rect &o) { return o.intersects(r); });
     if (overlaps) {
       int right = INT_MIN;
       for (const auto &o : occupied)
@@ -317,8 +315,8 @@ void MonitorTopology::saveComputer(const QString &computer, const QList<StoredMo
 bool MonitorTopology::decodeReport(const QString &args, QString &computer, std::vector<MonitorInfo> &monitors)
 {
   const auto decoded = QByteArray::fromBase64Encoding(
-      args.toLatin1(), QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals |
-                           QByteArray::AbortOnBase64DecodingErrors
+      args.toLatin1(),
+      QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals | QByteArray::AbortOnBase64DecodingErrors
   );
   if (!decoded)
     return false;

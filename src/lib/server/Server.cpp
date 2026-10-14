@@ -1949,8 +1949,8 @@ void Server::loadMonitorLayout()
       break;
     case Unplaced:
       LOG_INFO(
-          "monitor layout: \"%s/%s\" is not placed and is only reachable through its own OS",
-          issue.computerA.c_str(), issue.monitorA.c_str()
+          "monitor layout: \"%s/%s\" is not placed and is only reachable through its own OS", issue.computerA.c_str(),
+          issue.monitorA.c_str()
       );
       break;
     case Offline:

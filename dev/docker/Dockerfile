@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: (C) 2026 Deskflow Developers
+# SPDX-License-Identifier: MIT
 # Development/build image for the per-monitor layout fork.
 # Mirrors the "debian" dependency set used by upstream CI
 # (.github/actions/install-dependencies) plus Xvfb/xrandr for headless tests.

@@ -15,7 +15,8 @@ using namespace deskflow::monitors;
 
 namespace {
 
-MonitorInfo monitor(const char *id, const char *label, int x, int y, int w, int h, int scale = 100, bool primary = false)
+MonitorInfo
+monitor(const char *id, const char *label, int x, int y, int w, int h, int scale = 100, bool primary = false)
 {
   MonitorInfo info;
   info.id = id;
@@ -77,14 +78,13 @@ void MonitorLayoutViewTests::init()
   // plus an unplaced queen Q3 that was just hot-plugged.
   m_topology = MonitorTopology();
   m_topology.report(
-      "mona",
-      {monitor("\\\\.\\DISPLAY1", "DELL U2720Q", 0, 0, 2560, 1440, 150, true),
-       monitor("\\\\.\\DISPLAY2", "LG 24MP", 2560, 0, 1920, 1080)}
+      "mona", {monitor("\\\\.\\DISPLAY1", "DELL U2720Q", 0, 0, 2560, 1440, 150, true),
+               monitor("\\\\.\\DISPLAY2", "LG 24MP", 2560, 0, 1920, 1080)}
   );
   m_topology.report(
       "queen",
-      {monitor("DP-1", "DP-1", 0, 0, 1920, 1080, 100, true), monitor("HDMI-1", "HDMI-1 (portrait)", 1920, 0, 1080, 1920),
-       monitor("DP-2", "DP-2", 3000, 0, 1280, 1024)}
+      {monitor("DP-1", "DP-1", 0, 0, 1920, 1080, 100, true),
+       monitor("HDMI-1", "HDMI-1 (portrait)", 1920, 0, 1080, 1920), monitor("DP-2", "DP-2", 3000, 0, 1280, 1024)}
   );
   QVERIFY(m_topology.setPosition("mona", "\\\\.\\DISPLAY1", 0, 0));
   QVERIFY(m_topology.setPosition("queen", "DP-1", 1707, 0));

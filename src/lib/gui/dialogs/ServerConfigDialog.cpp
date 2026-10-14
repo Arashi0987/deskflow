@@ -23,9 +23,9 @@
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QVBoxLayout>
-#include <QMessageBox>
 
 using enum ComputerConfig::SwitchCorner;
 
@@ -750,8 +750,10 @@ void ServerConfigDialog::updateMonitorLayoutIssues()
   using enum deskflow::monitors::MonitorLayout::IssueKind;
   QStringList lines;
   for (const auto &issue : m_monitorTopology.layout().validate()) {
-    const auto a = QStringLiteral("%1/%2").arg(QString::fromStdString(issue.computerA), QString::fromStdString(issue.monitorA));
-    const auto b = QStringLiteral("%1/%2").arg(QString::fromStdString(issue.computerB), QString::fromStdString(issue.monitorB));
+    const auto a =
+        QStringLiteral("%1/%2").arg(QString::fromStdString(issue.computerA), QString::fromStdString(issue.monitorA));
+    const auto b =
+        QStringLiteral("%1/%2").arg(QString::fromStdString(issue.computerB), QString::fromStdString(issue.monitorB));
     switch (issue.kind) {
     case Overlap:
       lines << tr("⚠ %1 overlaps %2; move one of them so that they only touch.").arg(a, b);

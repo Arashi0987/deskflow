@@ -8,6 +8,8 @@
 
 #include "../deskflow/MockEventQueue.h"
 #include "deskflow/AppUtil.h"
+#include "deskflow/ProtocolTypes.h"
+#include "deskflow/ProtocolUtil.h"
 #include "io/IStream.h"
 #include "server/ClientProxy1_0.h"
 #include "server/ClientProxy1_1.h"
@@ -15,8 +17,6 @@
 #include "server/ClientProxy1_7.h"
 #include "server/ClientProxy1_8.h"
 #include "server/ClientProxy1_9.h"
-#include "deskflow/ProtocolTypes.h"
-#include "deskflow/ProtocolUtil.h"
 
 #include <algorithm>
 #include <cstring>
