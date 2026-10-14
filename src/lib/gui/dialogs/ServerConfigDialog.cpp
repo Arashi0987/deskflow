@@ -16,9 +16,15 @@
 #include "dialogs/ActionDialog.h"
 #include "dialogs/ComputerSettingsDialog.h"
 #include "dialogs/HotkeyDialog.h"
+#include "gui/widgets/MonitorLayoutView.h"
 #include "gui/widgets/SettingsDialogButtonBox.h"
 
+#include <QCheckBox>
 #include <QFileDialog>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+#include <QVBoxLayout>
 #include <QMessageBox>
 
 using enum ComputerConfig::SwitchCorner;
@@ -40,6 +46,7 @@ ServerConfigDialog::ServerConfigDialog(QWidget *parent, ServerConfig &config)
   layout()->addWidget(m_buttonBox);
 
   loadFromConfig();
+  initMonitorLayoutTab();
 
   ui->lblRemoveComputer->setPixmap(QIcon::fromTheme("user-trash").pixmap(QSize(64, 64)));
   ui->lblNewComputer->setEnabled(!model().isFull());
@@ -103,6 +110,8 @@ void ServerConfigDialog::save()
     Settings::setValue(Settings::Computer::Aliases.arg(computerName), computer.aliases());
     Settings::setValue(Settings::Computer::Name.arg(computerName), computerName);
   }
+  Settings::setValue(Settings::Server::MonitorLayout, m_cbMonitorLayout->isChecked());
+  m_monitorTopology.save(monitorLayoutComputers());
   Settings::removeUnknownComputers(computerNames);
   QDialog::accept();
 }
@@ -431,6 +440,7 @@ void ServerConfigDialog::resetFromSettings()
   m_serverConfig.setConfigFile(m_originalServerConfigUsesExternalFile);
   m_serverConfig.setUseExternalConfig(m_originalServerConfigIsExternal);
   loadFromConfig();
+  loadMonitorLayout();
   if (ui->tabWidget->currentWidget() == ui->tabComputers) {
     ui->computerSetupView->reset();
     ui->computerSetupView->update();
@@ -629,7 +639,130 @@ bool ServerConfigDialog::isGeneralConfigDefault() const
 void ServerConfigDialog::setButtonBoxEnabledButtons() const
 {
   const bool writable = Settings::isWritable();
-  m_buttonBox->enableSave(writable && (isGeneralConfigModified() || !(m_originalServerConfig == m_serverConfig)));
-  m_buttonBox->enableReset(writable && (isGeneralConfigModified() || !(m_originalServerConfig == m_serverConfig)));
+  const bool modified =
+      isGeneralConfigModified() || isMonitorLayoutModified() || !(m_originalServerConfig == m_serverConfig);
+  m_buttonBox->enableSave(writable && modified);
+  m_buttonBox->enableReset(writable && modified);
   m_buttonBox->enableRestoreDefaults(writable && !isGeneralConfigDefault() && ui->tabWidget->currentIndex() == 2);
+}
+
+void ServerConfigDialog::initMonitorLayoutTab()
+{
+  auto *page = new QWidget(this);
+  auto *layout = new QVBoxLayout(page);
+
+  m_cbMonitorLayout = new QCheckBox(tr("Route the pointer between individual monitors using this layout"), page);
+  m_cbMonitorLayout->setToolTip(
+      tr("When off, computers are linked by the Computers tab as before. When on, placed monitors are linked by their "
+         "touching edges; computers with no placed monitor (or running an older Deskflow) keep their computer links.")
+  );
+  layout->addWidget(m_cbMonitorLayout);
+
+  auto *help = new QLabel(
+      tr("Every monitor of every computer is shown separately. Drag monitors so that edges you want to cross touch; "
+         "edges snap together. Arrow keys nudge the selected monitor (Shift: 10 units). Gaps and the parts of an edge "
+         "that do not touch another monitor are walls. This does not change the computers' own display settings."),
+      page
+  );
+  help->setWordWrap(true);
+  layout->addWidget(help);
+
+  m_monitorLayoutView = new MonitorLayoutView(page);
+  m_monitorLayoutView->setTopology(&m_monitorTopology);
+  layout->addWidget(m_monitorLayoutView, 1);
+
+  m_lblMonitorSelection = new QLabel(page);
+  m_lblMonitorSelection->setWordWrap(true);
+  layout->addWidget(m_lblMonitorSelection);
+  m_lblMonitorIssues = new QLabel(page);
+  m_lblMonitorIssues->setWordWrap(true);
+  layout->addWidget(m_lblMonitorIssues);
+
+  auto *buttons = new QHBoxLayout();
+  auto *arrange = new QPushButton(tr("Place unplaced monitors"), page);
+  arrange->setToolTip(tr("Place every unplaced monitor using its computer's own display arrangement"));
+  auto *clear = new QPushButton(tr("Clear layout"), page);
+  clear->setToolTip(tr("Remove every monitor from the layout (they stay remembered)"));
+  buttons->addWidget(arrange);
+  buttons->addWidget(clear);
+  buttons->addStretch();
+  layout->addLayout(buttons);
+
+  ui->tabWidget->addTab(page, tr("Monitor layout"));
+
+  connect(m_monitorLayoutView, &MonitorLayoutView::selectionChanged, m_lblMonitorSelection, &QLabel::setText);
+  connect(m_monitorLayoutView, &MonitorLayoutView::layoutChanged, this, [this] {
+    updateMonitorLayoutIssues();
+    setButtonBoxEnabledButtons();
+  });
+  connect(m_cbMonitorLayout, &QCheckBox::toggled, this, [this] { setButtonBoxEnabledButtons(); });
+  connect(arrange, &QPushButton::clicked, this, [this] {
+    m_monitorTopology.autoPlaceAll();
+    m_monitorLayoutView->update();
+    updateMonitorLayoutIssues();
+    setButtonBoxEnabledButtons();
+  });
+  connect(clear, &QPushButton::clicked, this, [this] {
+    for (const auto &computer : m_monitorTopology.computers()) {
+      for (const auto &m : m_monitorTopology.monitors(computer))
+        m_monitorTopology.unplace(computer, QString::fromStdString(m.info.id));
+    }
+    m_monitorLayoutView->update();
+    updateMonitorLayoutIssues();
+    setButtonBoxEnabledButtons();
+  });
+
+  loadMonitorLayout();
+}
+
+QStringList ServerConfigDialog::monitorLayoutComputers() const
+{
+  QStringList names;
+  for (const auto &computer : m_computerSetupModel.m_computers) {
+    if (!computer.name().isEmpty())
+      names.append(computer.name());
+  }
+  return names;
+}
+
+void ServerConfigDialog::loadMonitorLayout()
+{
+  if (!m_monitorLayoutView)
+    return;
+  m_cbMonitorLayout->setChecked(Settings::value(Settings::Server::MonitorLayout).toBool());
+  m_monitorTopology.load(monitorLayoutComputers());
+  m_monitorTopologySaved = m_monitorTopology;
+  m_monitorLayoutView->setTopology(&m_monitorTopology);
+  m_lblMonitorSelection->clear();
+  updateMonitorLayoutIssues();
+}
+
+bool ServerConfigDialog::isMonitorLayoutModified() const
+{
+  if (!m_cbMonitorLayout)
+    return false;
+  return m_cbMonitorLayout->isChecked() != Settings::value(Settings::Server::MonitorLayout).toBool() ||
+         !m_monitorTopology.sameMonitors(m_monitorTopologySaved);
+}
+
+void ServerConfigDialog::updateMonitorLayoutIssues()
+{
+  using enum deskflow::monitors::MonitorLayout::IssueKind;
+  QStringList lines;
+  for (const auto &issue : m_monitorTopology.layout().validate()) {
+    const auto a = QStringLiteral("%1/%2").arg(QString::fromStdString(issue.computerA), QString::fromStdString(issue.monitorA));
+    const auto b = QStringLiteral("%1/%2").arg(QString::fromStdString(issue.computerB), QString::fromStdString(issue.monitorB));
+    switch (issue.kind) {
+    case Overlap:
+      lines << tr("⚠ %1 overlaps %2; move one of them so that they only touch.").arg(a, b);
+      break;
+    case Isolated:
+      lines << tr("%1 does not touch any other monitor, so the pointer cannot reach it from another computer.").arg(a);
+      break;
+    case Unplaced:
+    case Offline:
+      break;
+    }
+  }
+  m_lblMonitorIssues->setText(lines.join('\n'));
 }

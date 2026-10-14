@@ -38,6 +38,8 @@ add_library(${target} STATIC
   config/Computer.h
   config/ComputerList.cpp
   config/ComputerList.h
+  config/MonitorTopology.cpp
+  config/MonitorTopology.h
   config/ServerConfig.cpp
   config/ServerConfig.h
   core/CoreProcess.cpp
@@ -105,6 +107,8 @@ add_library(${target} STATIC
   widgets/LogDock.h
   widgets/LogWidget.h
   widgets/LogWidget.cpp
+  widgets/MonitorLayoutView.cpp
+  widgets/MonitorLayoutView.h
   widgets/NewComputerWidget.cpp
   widgets/NewComputerWidget.h
   widgets/RemoveComputerWidget.cpp

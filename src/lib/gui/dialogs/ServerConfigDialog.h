@@ -10,11 +10,15 @@
 
 #include "ComputerSetupModel.h"
 #include "common/NetworkProtocol.h"
+#include "config/MonitorTopology.h"
 #include "config/ServerConfig.h"
 
 #include <QDialog>
 
 class SettingsDialogButtonBox;
+class MonitorLayoutView;
+class QCheckBox;
+class QLabel;
 class QItemSelection;
 
 namespace Ui {
@@ -97,6 +101,11 @@ private:
   bool isGeneralConfigModified() const;
   bool isGeneralConfigDefault() const;
   void setButtonBoxEnabledButtons() const;
+  void initMonitorLayoutTab();
+  void loadMonitorLayout();
+  void updateMonitorLayoutIssues();
+  bool isMonitorLayoutModified() const;
+  QStringList monitorLayoutComputers() const;
   std::unique_ptr<Ui::ServerConfigDialog> ui;
   QString m_message = "";
   int m_columns;
@@ -120,4 +129,10 @@ private:
   ServerConfig m_serverConfig;
   ComputerSetupModel m_computerSetupModel;
   SettingsDialogButtonBox *m_buttonBox = nullptr;
+  MonitorTopology m_monitorTopology;
+  MonitorTopology m_monitorTopologySaved;
+  MonitorLayoutView *m_monitorLayoutView = nullptr;
+  QCheckBox *m_cbMonitorLayout = nullptr;
+  QLabel *m_lblMonitorSelection = nullptr;
+  QLabel *m_lblMonitorIssues = nullptr;
 };
