@@ -19,7 +19,7 @@ services:
       && cmake --build /build -j$$(nproc)"
   test:
     <<: *base
-    command: bash -c "cd /build && ctest --output-on-failure -j8"
+    command: bash -c "QT_QPA_PLATFORM=minimal ctest --test-dir /build/src/unittests --output-on-failure -j8"
   shell:
     <<: *base
     command: bash
