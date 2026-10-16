@@ -10,6 +10,7 @@
 
 #include "base/IEventQueue.h"
 #include "base/Log.h"
+#include "common/Settings.h"
 #include "deskflow/AppUtil.h"
 #include "deskflow/Computer.h"
 #include "deskflow/DeskflowException.h"
@@ -215,6 +216,7 @@ bool Server::setConfig(const ServerConfig &config)
 
   // cut over
   processOptions();
+  loadMonitorLayout();
 
   // add ScrollLock as a hotkey to lock to the computer.  this was a
   // built-in feature in earlier releases and is now supported via
@@ -340,7 +342,9 @@ uint32_t Server::getActivePrimarySides() const
   using enum DirectionMask;
   using enum Direction;
   uint32_t sides = 0;
-  if (!isLockedToComputerServer()) {
+  if (!isLockedToComputerServer() && isMonitorRouted(m_primaryClient)) {
+    sides = m_monitorLayout.remoteSides(getName(m_primaryClient));
+  } else if (!isLockedToComputerServer()) {
     if (hasAnyNeighbor(m_primaryClient, Left)) {
       sides |= static_cast<int>(LeftMask);
     }
@@ -1139,6 +1143,10 @@ void Server::handleShapeChanged(BaseClientProxy *client)
 
   LOG_DEBUG("computer \"%s\" shape changed", getName(client).c_str());
 
+  // monitors may have been added, removed or changed resolution (hotplug)
+  updateMonitors(client);
+  m_primaryClient->reconfigure(getActivePrimarySides());
+
   // update jump coordinate
   int32_t x;
   int32_t y;
@@ -1618,6 +1626,9 @@ bool Server::onMouseMovePrimary(int32_t x, int32_t y)
     return false;
   }
 
+  const int32_t xOld = m_x;
+  const int32_t yOld = m_y;
+
   // save last delta
   m_xDelta2 = m_xDelta;
   m_yDelta2 = m_yDelta;
@@ -1629,6 +1640,13 @@ bool Server::onMouseMovePrimary(int32_t x, int32_t y)
   // save position
   m_x = x;
   m_y = y;
+
+  // with a monitor layout, only computers that aren't placed in it are still
+  // reached through the legacy links on the outer edges of the desktop
+  const bool unplacedLinksOnly = isMonitorRouted(m_active);
+  if (unplacedLinksOnly && onMouseMovePrimaryMonitors(xOld, yOld, x, y)) {
+    return true;
+  }
 
   // get computer shape
   int32_t ax;
@@ -1693,6 +1711,9 @@ bool Server::onMouseMovePrimary(int32_t x, int32_t y)
     y = ys.at(i);
     // get jump destination
     BaseClientProxy *newComputer = mapToNeighbor(m_active, dir, x, y);
+    if (unplacedLinksOnly && newComputer != nullptr && isMonitorRouted(newComputer)) {
+      newComputer = nullptr;
+    }
 
     // should we switch or not?
     if (isSwitchOkay(newComputer, dir, x, y, xc, yc)) {
@@ -1752,6 +1773,11 @@ void Server::onMouseMoveSecondary(int32_t dx, int32_t dy)
   // save current delta
   m_xDelta = dx;
   m_yDelta = dy;
+
+  if (isMonitorRouted(m_active)) {
+    onMouseMoveSecondaryMonitors(xOld, yOld, dx, dy);
+    return;
+  }
 
   // accumulate motion
   m_x += dx;
@@ -1877,6 +1903,210 @@ void Server::onMouseMoveSecondary(int32_t dx, int32_t dy)
   }
 }
 
+void Server::loadMonitorLayout()
+{
+  using namespace deskflow::monitors;
+
+  m_monitorLayoutEnabled = Settings::value(Settings::Server::MonitorLayout).toBool();
+  m_monitorLayout.clearPlacements();
+  size_t placed = 0;
+  for (const auto &computer : Settings::knownComputers()) {
+    if (computer.isEmpty()) {
+      continue;
+    }
+    std::vector<StoredMonitor> stored;
+    const auto records = Settings::value(Settings::Computer::Monitors.arg(computer)).toStringList();
+    for (const auto &record : records) {
+      if (const auto monitor = parseStored(record.toStdString()); monitor) {
+        stored.push_back(*monitor);
+        placed += monitor->placed ? 1 : 0;
+      } else {
+        LOG_WARN("ignoring malformed monitor record for \"%s\": %s", qPrintable(computer), qPrintable(record));
+      }
+    }
+    m_monitorLayout.setStored(computer.toStdString(), stored);
+  }
+
+  if (!m_monitorLayoutEnabled) {
+    LOG_DEBUG("per-monitor layout disabled, using computer links");
+    return;
+  }
+
+  LOG_INFO("per-monitor layout enabled, %zu monitor placement(s) loaded", placed);
+  for (const auto &issue : m_monitorLayout.validate()) {
+    switch (issue.kind) {
+      using enum MonitorLayout::IssueKind;
+    case Overlap:
+      LOG_WARN(
+          "monitor layout: \"%s/%s\" overlaps \"%s/%s\"", issue.computerA.c_str(), issue.monitorA.c_str(),
+          issue.computerB.c_str(), issue.monitorB.c_str()
+      );
+      break;
+    case Isolated:
+      LOG_WARN(
+          "monitor layout: \"%s/%s\" does not touch any other monitor", issue.computerA.c_str(), issue.monitorA.c_str()
+      );
+      break;
+    case Unplaced:
+      LOG_INFO(
+          "monitor layout: \"%s/%s\" is not placed and is only reachable through its own OS", issue.computerA.c_str(),
+          issue.monitorA.c_str()
+      );
+      break;
+    case Offline:
+      LOG_INFO("monitor layout: \"%s/%s\" is placed but offline", issue.computerA.c_str(), issue.monitorA.c_str());
+      break;
+    }
+  }
+}
+
+void Server::updateMonitors(const BaseClientProxy *client)
+{
+  using namespace deskflow::monitors;
+
+  const auto name = getName(client);
+  const auto monitors = client->getMonitors();
+  m_monitorLayout.setLiveMonitors(name, monitors);
+  LOG_DEBUG(
+      "computer \"%s\" has %zu monitor(s), %s", name.c_str(), monitors.size(),
+      isMonitorRouted(client) ? "routed per monitor" : "using computer links"
+  );
+
+  // the GUI shows the monitors in the layout editor and remembers them while the computer is offline
+  const auto payload = QByteArray::fromStdString(name + "\n" + serializeMonitors(monitors));
+  ipcSendToClient(
+      QStringLiteral("monitorTopology"),
+      QString::fromLatin1(payload.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals))
+  );
+}
+
+bool Server::isMonitorRouted(const BaseClientProxy *client) const
+{
+  return m_monitorLayoutEnabled && m_monitorLayout.isRouted(getName(client));
+}
+
+BaseClientProxy *Server::findClient(const std::string &name) const
+{
+  const auto it = m_clients.find(name);
+  return it == m_clients.end() ? nullptr : it->second;
+}
+
+bool Server::onMouseMovePrimaryMonitors(int32_t xOld, int32_t yOld, int32_t x, int32_t y)
+{
+  using Kind = deskflow::monitors::MonitorLayout::StepKind;
+
+  // the OS keeps the server's cursor on its monitors, so pushing against an edge
+  // (within the jump zone) counts as crossing it
+  const int32_t zone = std::max(getJumpZoneSize(m_primaryClient), 1);
+  const auto step = m_monitorLayout.route(getName(m_primaryClient), xOld, yOld, x, y, zone, 0);
+
+  switch (step.kind) {
+  case Kind::Remote: {
+    auto *dst = findClient(step.computer);
+    if (dst == nullptr) {
+      return false;
+    }
+    LOG_VERBOSE(
+        "monitor edge %s of \"%s\" leads to \"%s/%s\" at %d,%d", deskflow::monitors::MonitorLayout::dirName(step.dir),
+        getName(m_primaryClient).c_str(), step.computer.c_str(), step.monitorId.c_str(), step.x, step.y
+    );
+    // when a switch delay or double tap is pending, keep waiting rather than falling back
+    if (isSwitchOkay(dst, step.dir, step.x, step.y, step.clampX, step.clampY)) {
+      switchComputer(dst, step.x, step.y, false);
+    }
+    return true;
+  }
+
+  case Kind::Local:
+    // the layout puts a different local monitor across this edge than the OS does
+    if (step.x != x || step.y != y) {
+      LOG_VERBOSE("monitor layout moves the cursor to \"%s\" at %d,%d", step.monitorId.c_str(), step.x, step.y);
+      switchComputer(m_primaryClient, step.x, step.y, false);
+      return true;
+    }
+    return false;
+
+  default:
+    // nothing in the layout across this edge
+    return false;
+  }
+}
+
+void Server::onMouseMoveSecondaryMonitors(int32_t xOld, int32_t yOld, int32_t dx, int32_t dy)
+{
+  using Kind = deskflow::monitors::MonitorLayout::StepKind;
+
+  // entering the server's own computer must land outside its jump zone
+  const int32_t inset = getJumpZoneSize(m_primaryClient);
+  const auto step = m_monitorLayout.route(getName(m_active), xOld, yOld, xOld + dx, yOld + dy, 0, inset);
+
+  switch (step.kind) {
+  case Kind::Remote:
+    if (auto *dst = findClient(step.computer);
+        dst != nullptr && isSwitchOkay(dst, step.dir, step.x, step.y, step.clampX, step.clampY)) {
+      switchComputer(dst, step.x, step.y, false);
+      return;
+    }
+    // not switching (yet): hold the cursor at the edge while a switch delay runs
+    m_x = step.clampX;
+    m_y = step.clampY;
+    break;
+
+  case Kind::Blocked: {
+    // nothing in the layout along this part of the edge. a computer that isn't placed in
+    // the layout may still be linked to this side of the desktop the legacy way.
+    int32_t x = xOld + dx;
+    int32_t y = yOld + dy;
+    int32_t ax;
+    int32_t ay;
+    int32_t aw;
+    int32_t ah;
+    m_active->getShape(ax, ay, aw, ah);
+    using enum Direction;
+    auto dir = NoDirection;
+    if (x < ax) {
+      dir = Left;
+    } else if (x >= ax + aw) {
+      dir = Right;
+    } else if (y < ay) {
+      dir = Top;
+    } else if (y >= ay + ah) {
+      dir = Bottom;
+    }
+    auto *dst = dir == NoDirection ? nullptr : mapToNeighbor(m_active, dir, x, y);
+    if (dst != nullptr && !isMonitorRouted(dst)) {
+      if (isSwitchOkay(dst, dir, x, y, step.clampX, step.clampY)) {
+        switchComputer(dst, x, y, false);
+        return;
+      }
+    } else {
+      stopSwitch();
+    }
+    m_x = step.x;
+    m_y = step.y;
+    break;
+  }
+
+  default: {
+    // stay on this monitor or move to another monitor of the same computer
+    m_x = step.x;
+    m_y = step.y;
+    using enum Direction;
+    const bool movingAway = (m_switchDir == Left && dx > 0) || (m_switchDir == Right && dx < 0) ||
+                            (m_switchDir == Top && dy > 0) || (m_switchDir == Bottom && dy < 0);
+    if (m_switchComputer != nullptr && (movingAway || step.kind == Kind::Local)) {
+      noSwitch(m_x, m_y);
+    }
+    break;
+  }
+  }
+
+  if (m_x != xOld || m_y != yOld) {
+    LOG_VERBOSE("move on %s to %d,%d", getName(m_active).c_str(), m_x, m_y);
+    m_active->mouseMove(m_x, m_y);
+  }
+}
+
 void Server::onMouseWheel(int32_t xDelta, int32_t yDelta)
 {
   LOG_VERBOSE("onMouseWheel %+d,%+d", xDelta, yDelta);
@@ -1907,6 +2137,7 @@ bool Server::addClient(BaseClientProxy *client)
   // add to list
   m_clientSet.insert(client);
   m_clients.try_emplace(name, client);
+  updateMonitors(client);
 
   // initialize client data
   int32_t x;
@@ -1935,8 +2166,19 @@ bool Server::removeClient(BaseClientProxy *client)
   m_events->removeHandler(ClipboardChanged, client->getEventTarget());
 
   // remove from list
-  m_clients.erase(getName(client));
+  const auto name = getName(client);
+  m_clients.erase(name);
   m_clientSet.erase(i);
+
+  // its monitors are offline now; placements are kept for when it reconnects
+  m_monitorLayout.removeLiveMonitors(name);
+  ipcSendToClient(
+      QStringLiteral("monitorTopology"),
+      QString::fromLatin1(
+          QByteArray::fromStdString(name + "\n")
+              .toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals)
+      )
+  );
 
   return true;
 }

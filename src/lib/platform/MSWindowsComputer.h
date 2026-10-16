@@ -59,6 +59,7 @@ public:
   bool getClipboard(ClipboardID id, IClipboard *) const override;
   void getShape(int32_t &x, int32_t &y, int32_t &width, int32_t &height) const override;
   void getCursorPos(int32_t &x, int32_t &y) const override;
+  std::vector<deskflow::monitors::MonitorInfo> getMonitors() const override;
 
   /**
    * \brief Get the position of the cursor on the current machine

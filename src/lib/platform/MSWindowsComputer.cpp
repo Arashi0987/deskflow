@@ -440,6 +440,103 @@ void MSWindowsComputer::getCursorPos(int32_t &x, int32_t &y) const
   m_desks->getCursorPos(x, y);
 }
 
+std::vector<deskflow::monitors::MonitorInfo> MSWindowsComputer::getMonitors() const
+{
+  using deskflow::monitors::MonitorInfo;
+
+  struct Found
+  {
+    HMONITOR handle;
+    MonitorInfo info;
+  };
+  std::vector<Found> found;
+
+  // bounds in this process's own coordinate space, i.e. the space used for the cursor and getShape()
+  EnumDisplayMonitors(
+      nullptr, nullptr,
+      [](HMONITOR handle, HDC, LPRECT, LPARAM data) -> BOOL {
+        auto *list = reinterpret_cast<std::vector<Found> *>(data);
+        MONITORINFOEXW mi{};
+        mi.cbSize = sizeof(mi);
+        if (!GetMonitorInfoW(handle, &mi)) {
+          return TRUE;
+        }
+
+        MonitorInfo info;
+        const auto &rc = mi.rcMonitor;
+        info.local = {rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top};
+        info.primary = (mi.dwFlags & MONITORINFOF_PRIMARY) != 0;
+
+        // the device interface name identifies the physical monitor on its port and survives
+        // reboots and DISPLAYn renumbering; fall back to the adapter output name
+        const auto deviceName = QString::fromWCharArray(mi.szDevice);
+        DISPLAY_DEVICEW dd{};
+        dd.cb = sizeof(dd);
+        if (EnumDisplayDevicesW(mi.szDevice, 0, &dd, EDD_GET_DEVICE_INTERFACE_NAME) && dd.DeviceID[0] != L'\0') {
+          info.id = QString::fromWCharArray(dd.DeviceID).toStdString();
+          info.label = QStringLiteral("%1 (%2)")
+                           .arg(QString::fromWCharArray(dd.DeviceString), deviceName.section('\\', -1))
+                           .toStdString();
+        } else {
+          info.id = deviceName.toStdString();
+          info.label = deviceName.section('\\', -1).toStdString();
+        }
+
+        DEVMODEW mode{};
+        mode.dmSize = sizeof(mode);
+        if (EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &mode)) {
+          info.pixelWidth = static_cast<int32_t>(mode.dmPelsWidth);
+          info.pixelHeight = static_cast<int32_t>(mode.dmPelsHeight);
+          info.rotation = static_cast<int32_t>(mode.dmDisplayOrientation) * 90;
+        }
+
+        list->push_back({handle, info});
+        return TRUE;
+      },
+      reinterpret_cast<LPARAM>(&found)
+  );
+
+  // per-monitor DPI is only reported to per-monitor aware threads, so switch this thread
+  // temporarily (Windows 10 1607+). both functions are looked up at runtime so older
+  // systems still work, they just report 100%.
+  using GetDpiForMonitorFn = HRESULT(WINAPI *)(HMONITOR, int, UINT *, UINT *);
+  using SetThreadDpiAwarenessContextFn = HANDLE(WINAPI *)(HANDLE);
+  static const auto getDpiForMonitor = reinterpret_cast<GetDpiForMonitorFn>(
+      reinterpret_cast<void *>(GetProcAddress(LoadLibraryW(L"Shcore.dll"), "GetDpiForMonitor"))
+  );
+  static const auto setThreadDpiAwarenessContext = reinterpret_cast<SetThreadDpiAwarenessContextFn>(
+      reinterpret_cast<void *>(GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext"))
+  );
+  if (getDpiForMonitor != nullptr && setThreadDpiAwarenessContext != nullptr) {
+    const auto kPerMonitorAwareV2 = reinterpret_cast<HANDLE>(static_cast<intptr_t>(-4));
+    const HANDLE previous = setThreadDpiAwarenessContext(kPerMonitorAwareV2);
+    for (auto &[handle, info] : found) {
+      UINT dpiX = 0;
+      UINT dpiY = 0;
+      if (SUCCEEDED(getDpiForMonitor(handle, 0 /* MDT_EFFECTIVE_DPI */, &dpiX, &dpiY)) && dpiX > 0) {
+        info.scalePercent = static_cast<int32_t>((dpiX * 100 + 48) / 96);
+      }
+    }
+    if (previous != nullptr) {
+      setThreadDpiAwarenessContext(previous);
+    }
+  }
+
+  std::vector<MonitorInfo> monitors;
+  for (const auto &[handle, info] : found) {
+    LOG_DEBUG(
+        "monitor \"%s\" (%s) at %d,%d %dx%d native %dx%d scale %d%% rotation %d%s", info.label.c_str(), info.id.c_str(),
+        info.local.x, info.local.y, info.local.w, info.local.h, info.pixelWidth, info.pixelHeight, info.scalePercent,
+        info.rotation, info.primary ? " primary" : ""
+    );
+    monitors.push_back(info);
+  }
+  if (monitors.empty()) {
+    return PlatformComputer::getMonitors();
+  }
+  return monitors;
+}
+
 /*
  * getThisCursorPos and setThisCursorPos will attempt to negotiate with the
  * system to try get the and set the mouse position, however on the logon screen

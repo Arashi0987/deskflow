@@ -10,6 +10,7 @@
 
 #include "base/Event.h"
 #include "base/Stopwatch.h"
+#include "common/MonitorLayout.h"
 #include "common/NetworkProtocol.h"
 #include "deskflow/Clipboard.h"
 #include "deskflow/ClipboardTypes.h"
@@ -303,6 +304,20 @@ private:
   // process options from configuration
   void processOptions();
 
+  //! @name per-monitor layout
+  //@{
+  // load the enabled flag and monitor placements from settings
+  void loadMonitorLayout();
+  // refresh the live monitors reported by \p client and tell the GUI
+  void updateMonitors(const BaseClientProxy *client);
+  // true when pointer motion on \p client is routed by the monitor layout
+  bool isMonitorRouted(const BaseClientProxy *client) const;
+  BaseClientProxy *findClient(const std::string &name) const;
+  // returns true when the layout handled the motion (switched, warped, or a switch is pending)
+  bool onMouseMovePrimaryMonitors(int32_t xOld, int32_t yOld, int32_t x, int32_t y);
+  void onMouseMoveSecondaryMonitors(int32_t xOld, int32_t yOld, int32_t dx, int32_t dy);
+  //@}
+
   // event handlers
   void handleShapeChanged(BaseClientProxy *client);
   void handleClipboardGrabbed(const Event &event, BaseClientProxy *client);
@@ -457,6 +472,10 @@ private:
 
   // relative mouse move option
   bool m_relativeMoves = false;
+
+  // per-monitor layout (server/monitorLayout); when disabled the legacy computer links are used
+  deskflow::monitors::MonitorLayout m_monitorLayout;
+  bool m_monitorLayoutEnabled = false;
 
   // flag whether or not we have broadcasting enabled and the computers to
   // which we should send broadcasted keys.

@@ -45,7 +45,7 @@ static const int16_t kProtocolMajorVersion = 1;
  * @note When incrementing the minor version, the Deskflow application version should also increment
  * @since Protocol version 1.0
  */
-static const int16_t kProtocolMinorVersion = 8;
+static const int16_t kProtocolMinorVersion = 9;
 
 /**
  * @brief Default TCP port for Deskflow connections
@@ -1161,6 +1161,36 @@ extern const char *const kMsgDSecureInputNotification;
  * @since Protocol version 1.8
  */
 extern const char *const kMsgDLanguageSynchronisation;
+
+/**
+ * @brief Monitor topology
+ *
+ * **Message Code**: `"DMON"`
+ * **Direction**: Secondary → Primary
+ * **Format**: `"DMON%s"`
+ * **Parameters**:
+ * - `$1`: Monitor list (string), one monitor per line
+ *
+ * **Example**:
+ *
+ * Two monitors, the second one portrait
+ * ```
+ * "DMON...id=DP-1;x=0;y=0;w=2560;h=1440;scale=100;rot=0;primary=1\nid=HDMI-1;x=2560;y=0;w=1080;h=1920;scale=100;rot=90;primary=0"
+ * ```
+ *
+ * Sent immediately before every DINF message, so the primary always has the
+ * monitor list that matches the shape it is about to receive. Each line is a
+ * `key=value;...` record (values %-escaped) with at least `id`, `x`, `y`, `w`
+ * and `h`; bounds are in the secondary's input coordinate space, the same space
+ * as DINF. Unknown keys must be ignored. See deskflow::monitors::serializeMonitors().
+ *
+ * Used by the primary to route the pointer between individual monitors of
+ * different computers. Peers on protocol 1.8 or older never send or receive
+ * it and are treated as a single monitor covering their whole shape.
+ *
+ * @since Protocol version 1.9
+ */
+extern const char *const kMsgDMonitors;
 
 /** @} */ // end of protocol_system group
 

@@ -26,6 +26,7 @@
 #include "common/VersionInfo.h"
 #include "gui/Messages.h"
 #include "gui/TlsUtility.h"
+#include "gui/config/MonitorTopology.h"
 #include "gui/core/CoreProcess.h"
 #include "gui/ipc/DaemonIpcClient.h"
 #include "gui/widgets/LogDock.h"
@@ -278,6 +279,12 @@ void MainWindow::connectSlots()
   connect(&m_coreProcess, &CoreProcess::retryIn, this, &MainWindow::updateTimeoutDelay);
   connect(&m_coreProcess, &CoreProcess::peerFingerprint, this, &MainWindow::handlePeerFingerprint);
   connect(&m_coreProcess, &CoreProcess::missingKeyboardLayouts, this, &MainWindow::handleMissingKeyboardLayouts);
+  connect(&m_coreProcess, &CoreProcess::monitorTopology, this, [](const QString &payload) {
+    if (const auto computer = MonitorTopology::handleReport(payload); computer.isEmpty())
+      qWarning("ignoring malformed monitor topology report from core");
+    else
+      qDebug("monitor topology updated for %s", qPrintable(computer));
+  });
 
   if (Settings::value(Settings::Gui::AutoStartCore).toBool()) {
     connect(ui->btnToggleCore, &QPushButton::clicked, m_actionStopCore, &QAction::trigger, Qt::UniqueConnection);
@@ -1203,8 +1210,12 @@ bool MainWindow::generateCertificate()
 
 void MainWindow::serverClientsChanged(const QStringList &clients)
 {
-  if (m_coreProcess.mode() != CoreMode::Server || !m_coreProcess.isStarted())
+  if (m_coreProcess.mode() != CoreMode::Server || !m_coreProcess.isStarted()) {
+    MonitorTopology::live().retainOnline({});
     return;
+  }
+  // monitors of computers that disconnected are remembered but shown offline in the layout editor
+  MonitorTopology::live().retainOnline(clients + QStringList{Settings::value(Settings::Core::ComputerName).toString()});
   m_statusBar->setServerClients(clients);
 }
 

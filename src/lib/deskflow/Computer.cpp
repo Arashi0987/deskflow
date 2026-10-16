@@ -409,6 +409,11 @@ void Computer::getCursorPos(int32_t &x, int32_t &y) const
   m_computer->getCursorPos(x, y);
 }
 
+std::vector<deskflow::monitors::MonitorInfo> Computer::getMonitors() const
+{
+  return m_computer->getMonitors();
+}
+
 void Computer::enablePrimary()
 {
   // get notified of screen saver activation/deactivation

@@ -22,6 +22,8 @@ private Q_SLOTS:
   void keyRepeat();
   void keyUp_data();
   void keyUp();
+  void monitors_dmonParsedInHandshakeAndLater();
+  void monitors_legacyClientReportsWholeDesktop();
 
 private:
   Log m_log;

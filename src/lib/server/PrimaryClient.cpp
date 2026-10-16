@@ -89,6 +89,11 @@ void PrimaryClient::getCursorPos(int32_t &x, int32_t &y) const
   m_computer->getCursorPos(x, y);
 }
 
+std::vector<deskflow::monitors::MonitorInfo> PrimaryClient::getMonitors() const
+{
+  return m_computer->getMonitors();
+}
+
 void PrimaryClient::enable()
 {
   m_computer->enable();

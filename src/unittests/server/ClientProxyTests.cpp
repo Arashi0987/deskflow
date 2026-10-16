@@ -8,13 +8,18 @@
 
 #include "../deskflow/MockEventQueue.h"
 #include "deskflow/AppUtil.h"
+#include "deskflow/ProtocolTypes.h"
+#include "deskflow/ProtocolUtil.h"
 #include "io/IStream.h"
 #include "server/ClientProxy1_0.h"
 #include "server/ClientProxy1_1.h"
 #include "server/ClientProxy1_6.h"
 #include "server/ClientProxy1_7.h"
 #include "server/ClientProxy1_8.h"
+#include "server/ClientProxy1_9.h"
 
+#include <algorithm>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <vector>
@@ -58,13 +63,23 @@ public:
     m_buffer.append(static_cast<const char *>(buffer), n);
   }
 
+  void feed(const QByteArray &bytes)
+  {
+    m_input.append(bytes);
+  }
+
   void close() override
   {
   }
 
-  uint32_t read(void *, uint32_t) override
+  uint32_t read(void *buffer, uint32_t n) override
   {
-    return 0;
+    const auto count = std::min<qsizetype>(n, m_input.size());
+    if (buffer != nullptr) {
+      memcpy(buffer, m_input.constData(), count);
+    }
+    m_input.remove(0, count);
+    return static_cast<uint32_t>(count);
   }
 
   void flush() override
@@ -96,6 +111,15 @@ public:
 
 private:
   QByteArray m_buffer;
+  QByteArray m_input;
+};
+
+class TestProxy1_9 : public ClientProxy1_9
+{
+public:
+  using ClientProxy1_9::ClientProxy1_9;
+  using ClientProxy1_9::parseHandshakeMessage;
+  using ClientProxy1_9::parseMessage;
 };
 
 std::unique_ptr<ClientProxy> makeProxy(int minor, deskflow::IStream *stream, IEventQueue *events)
@@ -119,6 +143,9 @@ std::unique_ptr<ClientProxy> makeProxy(int minor, deskflow::IStream *stream, IEv
     break;
   case 8:
     proxy = std::make_unique<ClientProxy1_8>("client", stream, server, events);
+    break;
+  case 9:
+    proxy = std::make_unique<TestProxy1_9>("client", stream, server, events);
     break;
   default:
     break;
@@ -166,6 +193,7 @@ void ClientProxyTests::keyDown_data()
   QTest::newRow("1.6") << 6 << "DKDN" + QByteArray::fromHex("0061 0000 001e");
   QTest::newRow("1.7") << 7 << "DKDN" + QByteArray::fromHex("0061 0000 001e");
   QTest::newRow("1.8") << 8 << "DKDL" + QByteArray::fromHex("0061 0000 001e 00000002") + "en";
+  QTest::newRow("1.9") << 9 << "DKDL" + QByteArray::fromHex("0061 0000 001e 00000002") + "en";
 }
 
 void ClientProxyTests::keyDown()
@@ -188,6 +216,7 @@ void ClientProxyTests::keyRepeat_data()
   QTest::newRow("1.6") << 6 << "DKRP" + QByteArray::fromHex("0061 0000 0003 001e");
   QTest::newRow("1.7") << 7 << "DKRP" + QByteArray::fromHex("0061 0000 0003 001e");
   QTest::newRow("1.8") << 8 << "DKRP" + QByteArray::fromHex("0061 0000 0003 001e 00000002") + "en";
+  QTest::newRow("1.9") << 9 << "DKRP" + QByteArray::fromHex("0061 0000 0003 001e 00000002") + "en";
 }
 
 void ClientProxyTests::keyRepeat()
@@ -210,6 +239,7 @@ void ClientProxyTests::keyUp_data()
   QTest::newRow("1.6") << 6 << "DKUP" + QByteArray::fromHex("0061 0000 001e");
   QTest::newRow("1.7") << 7 << "DKUP" + QByteArray::fromHex("0061 0000 001e");
   QTest::newRow("1.8") << 8 << "DKUP" + QByteArray::fromHex("0061 0000 001e");
+  QTest::newRow("1.9") << 9 << "DKUP" + QByteArray::fromHex("0061 0000 001e");
 }
 
 void ClientProxyTests::keyUp()
@@ -220,6 +250,52 @@ void ClientProxyTests::keyUp()
   ProxyUnderTest test(minor);
   test.proxy->keyUp(kKey, kMask, kButton);
   QCOMPARE(test.stream->take(), expected);
+}
+
+void ClientProxyTests::monitors_dmonParsedInHandshakeAndLater()
+{
+  using deskflow::monitors::MonitorInfo;
+
+  ProxyUnderTest test(9);
+  auto *proxy = static_cast<TestProxy1_9 *>(test.proxy.get());
+
+  MonitorInfo a;
+  a.id = "DP-1";
+  a.local = {0, 0, 2560, 1440};
+  a.primary = true;
+  MonitorInfo b;
+  b.id = "HDMI-1";
+  b.local = {2560, 0, 1080, 1920};
+  b.rotation = 90;
+
+  // build the wire bytes exactly as the 1.9 client sends them, minus the 4 byte code
+  auto wire = [&test](const std::vector<MonitorInfo> &monitors) {
+    const auto text = deskflow::monitors::serializeMonitors(monitors);
+    ProtocolUtil::writef(test.stream, kMsgDMonitors, &text);
+    return test.stream->take().mid(4);
+  };
+
+  test.stream->feed(wire({a, b}));
+  QVERIFY(proxy->parseHandshakeMessage(reinterpret_cast<const uint8_t *>("DMON")));
+  auto monitors = proxy->getMonitors();
+  QCOMPARE(monitors.size(), size_t(2));
+  QVERIFY(monitors[0] == a);
+  QVERIFY(monitors[1] == b);
+
+  // hotplug: the client sends an updated list after the handshake
+  test.stream->feed(wire({b}));
+  QVERIFY(proxy->parseMessage(reinterpret_cast<const uint8_t *>("DMON")));
+  monitors = proxy->getMonitors();
+  QCOMPARE(monitors.size(), size_t(1));
+  QCOMPARE(monitors[0].id, std::string("HDMI-1"));
+}
+
+void ClientProxyTests::monitors_legacyClientReportsWholeDesktop()
+{
+  ProxyUnderTest test(8);
+  const auto monitors = test.proxy->getMonitors();
+  QCOMPARE(monitors.size(), size_t(1));
+  QCOMPARE(monitors[0].id, std::string(deskflow::monitors::kWholeDesktopId));
 }
 
 QTEST_MAIN(ClientProxyTests)
